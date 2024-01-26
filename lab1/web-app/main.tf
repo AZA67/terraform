@@ -13,8 +13,14 @@ provider "aws" {
 }
 
 # Configure vpc to match architecture.png
-resource "aws_vpc" "tf-webapp_vpc" {
+resource "aws_vpc" "main" {
     cidr_block = "10.0.0.0/24"
+    enable_dns_support = true
+    enable_dns_hostnames = true 
+
+    tags {
+        name = "main-vpc"
+    }
 }
 
 resource "aws_subnet" "pub_sub1" {

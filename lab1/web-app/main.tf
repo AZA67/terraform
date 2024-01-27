@@ -18,19 +18,32 @@ resource "aws_vpc" "main" {
     enable_dns_support = true
     enable_dns_hostnames = true 
 
-    tags {
-        name = "main-vpc"
+    tags = {
+      Name = "main-vpc"
     }
 }
 
+resource "aws_internet_gateway" "igw" {
+    vpc_id = aws_vpc.main.id
+}
+
 resource "aws_subnet" "pub_sub1" {
-  vpc_id     = aws_vpc.tf-webapp_vpc.id
+  vpc_id     = aws_vpc.main.id
   cidr_block = "10.0.0.0/28"
+  map_public_ip_on_launch = true
+
+  tags = {
+    Name = "pub_sub1"
+  }
 }
 
 resource "aws_subnet" "priv_sub1" {
-  vpc_id     = aws_vpc.tf-webapp_vpc.id
+  vpc_id     = aws_vpc.main.id
   cidr_block = "10.0.0.16/28"
+
+  tags = {
+    Name = "priv_sub1"
+  }
 }
 
 #configure security group for ec2s
@@ -72,7 +85,7 @@ resource "aws_lb_target_group" "instances" {
     name = "example-target-group"
     port = 8080
     protocol = "HTTP"
-    vpc_id = aws_vpc.tf-webapp_vpc.id
+    vpc_id = aws_vpc.main.id
 
     health_check {
         path = "/"
@@ -110,7 +123,7 @@ resource "aws_lb_listener_rule" "instances" {
 
     action {
         type = "forward"
-        target_group_arn = "aws_lb_target_group.instances.arn"
+        target_group_arn = aws_lb_target_group.instances.arn
     }
 }
 
@@ -143,7 +156,11 @@ resource "aws_security_group_rule" "allow_alb_all_outbound" {
 resource "aws_lb" "load_balancer" {
     name = "web-app-lb"
     load_balancer_type = "application"
-    subnets = aws_subnet_ids.pub_sub1.ids
+    
+    subnet_mapping {
+      subnet_id = aws_subnet.pub_sub1.id
+    }
+    
     security_groups = [aws_security_group.alb.id]
 }
 
@@ -168,7 +185,7 @@ resource "aws_route53_record" "root" { #(traffic coming into devopdeployed.com w
 resource "aws_instance" "instance_1" {
   ami             = "ami-0c7217cdde317cfec" #ubuntu 22.04 (us-east-1)
   instance_type   = "t2.micro" 
-  security_groups = [aws.security_group.instance] #allows inbound traffic from the internet
+  vpc_security_group_ids = [aws_security_group.instances.id] #allows inbound traffic from the internet
   user_data       = <<-EOF
              #!/bin/bash
              echo "hello, world 1" > index.html
@@ -179,7 +196,7 @@ resource "aws_instance" "instance_1" {
 resource "aws_instance" "instance_2" {
     ami             = "ami-0c7217cdde317cfec"
     instance_type   = "t2.micro"
-    security_groups = [aws.security_group.instance.name]
+    vpc_security_group_ids = [aws_security_group.instances.id]
     user_data       = <<-EOF
                 #!/bin/bash
                 echo "hello world 2" > index.html
@@ -189,20 +206,25 @@ resource "aws_instance" "instance_2" {
 
 #configure s3 bucket and encryption
 resource "aws_s3_bucket" "bucket" {
-  bucket = "devops-directive-web-app-data"
+  bucket = "web-app-data"
   force_destroy = true
-  versioning {
-    enabled = true
+}
+
+resource "aws_s3_bucket_versioning" "bucket_versioning" {
+    bucket = aws_s3_bucket.bucket.id
+    versioning_configuration {
+      status = "Enabled"
+    }
   }
 
-  server_side_encryption_configuration {
+resource "aws_s3_bucket_server_side_encryption_configuration" "bucket_encryption" {
+    bucket = aws_s3_bucket.bucket.id
     rule {
         apply_server_side_encryption_by_default {
           sse_algorithm = "AES256"
         }
     }
   }
-}
 
 #Database configuration 
 resource "aws_db_instance" "db_instance" {
@@ -211,7 +233,7 @@ resource "aws_db_instance" "db_instance" {
     engine = "postgres"
     engine_version = "12.5"
     instance_class = "db.t2.micro"
-    name = "mydb"
+    db_name = "mydb"
     username = "foo"
     password = "foobarbaz"
     skip_final_snapshot = true

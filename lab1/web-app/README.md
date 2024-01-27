@@ -23,7 +23,7 @@ HOW MY APPROACH DIFFERS FROM '03-basics':
 - Source code has a pre-provisioned back-end (s3 and DB)
     + I did not set this up so it is also defined in main.tf
 
-- Source code had several outdated resource descriptions and configurations that I needed to update
+- Source code had several outdated resource descriptions and configurations that I needed to update (see 'error-log.txt')
 ###
 
 #######################
